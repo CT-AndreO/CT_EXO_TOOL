@@ -1,4 +1,3 @@
-$Global:SandboxMode = $true
 $Global:TargetUser = $null
 $Global:TenantName = "Disconnected"
 $ScriptRunning = $true
@@ -9,7 +8,8 @@ if (Test-Path $FunctionsPath) {
     Get-ChildItem -Path $FunctionsPath -Recurse -Filter *.ps1 | ForEach-Object {
         . $_.FullName
     }
-} else {
+}
+else {
     Write-Host "Error: Functions folder missing at $FunctionsPath" -ForegroundColor Red
     Read-Host "Press Enter to exit..."
     Exit
@@ -50,7 +50,8 @@ while ($ScriptRunning) {
                     
                     # Context clears out when the tech exits the user sub-menu back into search
                     $Global:TargetUser = $null
-                } else {
+                }
+                else {
                     $InSearchSession = $false
                 }
             }
