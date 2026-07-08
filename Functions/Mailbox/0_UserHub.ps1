@@ -6,12 +6,36 @@ function Invoke-UserMenu {
         return
     }
 
+    # 1. Parse and format the creation timestamp
+    if ($Global:SandboxMode -and ($null -eq $Global:TargetUser.WhenCreated)) {
+        $CreatedDate = "2024/04/28 14:22:10"
+    } elseif ($null -ne $Global:TargetUser.WhenCreated) {
+        $CreatedDate = $Global:TargetUser.WhenCreated.ToString("yyyy/MM/dd HH:mm:ss")
+    } else {
+        $CreatedDate = "Unknown"
+    }
+
+    # 2. Parse and format the Mailbox Type (RecipientTypeDetails)
+    if ($Global:SandboxMode -and ($null -eq $Global:TargetUser.RecipientTypeDetails)) {
+        $MailboxType = "Regular User (Simulated)"
+    } else {
+        # Translate raw Exchange values into clean human-readable text
+        switch ($Global:TargetUser.RecipientTypeDetails.ToString()) {
+            "UserMailbox"   { $MailboxType = "Regular User" }
+            "SharedMailbox" { $MailboxType = "Shared Mailbox" }
+            "RoomMailbox"   { $MailboxType = "Room / Resource" }
+            "EquipmentMailbox" { $MailboxType = "Equipment / Resource" }
+            Default         { $MailboxType = $Global:TargetUser.RecipientTypeDetails.ToString() }
+        }
+    }
+
     $UserRunning = $true
     while ($UserRunning) {
         Clear-Host
-        # Displaying the specific context of who we are editing right in the header
         Write-Host "=== MANAGING USER: $($Global:TargetUser.DisplayName) ===" -ForegroundColor Cyan
-        Write-Host "UPN: $($Global:TargetUser.UserPrincipalName)" -ForegroundColor Gray
+        Write-Host "User Principal Name:   $($Global:TargetUser.UserPrincipalName)" -ForegroundColor Gray
+        Write-Host "Mailbox Creation Date: $CreatedDate (GMT+2)" -ForegroundColor Gray
+        Write-Host "Mailbox Type:          $MailboxType" -ForegroundColor Gray
         Write-Host "--------------------------------------------------"
         Write-Host "1. Manage Archival Rules"
         Write-Host "2. Manage Auto Expansion"
