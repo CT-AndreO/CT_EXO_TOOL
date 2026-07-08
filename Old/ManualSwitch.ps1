@@ -1,7 +1,15 @@
 # --- CONFIGURATION ---
 $UserList = @(
-    "user@domain.co.za",
-    "user@domain.co.za"
+    "amanda@fhbc.co.za",
+    "hendrik@fhbc.co.za",
+    "joanne@fhbc.co.za",
+    "louise@fhbc.co.za",
+    "yolande@fhbc.co.za",
+    "reinet@fhbc.co.za",
+    "chalene@fhbc.co.za",
+    "lorraine@fhbc.co.za",
+    "morne@fhbc.co.za"
+
 )
     
 # --- INITIAL CONNECTION ---

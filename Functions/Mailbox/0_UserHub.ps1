@@ -7,26 +7,26 @@ function Invoke-UserMenu {
     }
 
     # 1. Parse and format the creation timestamp
-    if ($Global:SandboxMode -and ($null -eq $Global:TargetUser.WhenCreated)) {
-        $CreatedDate = "2024/04/28 14:22:10"
-    } elseif ($null -ne $Global:TargetUser.WhenCreated) {
+    if ($null -ne $Global:TargetUser.WhenCreated) {
         $CreatedDate = $Global:TargetUser.WhenCreated.ToString("yyyy/MM/dd HH:mm:ss")
-    } else {
+    }
+    else {
         $CreatedDate = "Unknown"
     }
 
     # 2. Parse and format the Mailbox Type (RecipientTypeDetails)
-    if ($Global:SandboxMode -and ($null -eq $Global:TargetUser.RecipientTypeDetails)) {
-        $MailboxType = "Regular User (Simulated)"
-    } else {
+    if ($null -ne $Global:TargetUser.RecipientTypeDetails) {
         # Translate raw Exchange values into clean human-readable text
         switch ($Global:TargetUser.RecipientTypeDetails.ToString()) {
-            "UserMailbox"   { $MailboxType = "Regular User" }
+            "UserMailbox" { $MailboxType = "Regular User" }
             "SharedMailbox" { $MailboxType = "Shared Mailbox" }
-            "RoomMailbox"   { $MailboxType = "Room / Resource" }
+            "RoomMailbox" { $MailboxType = "Room / Resource" }
             "EquipmentMailbox" { $MailboxType = "Equipment / Resource" }
-            Default         { $MailboxType = $Global:TargetUser.RecipientTypeDetails.ToString() }
+            Default { $MailboxType = $Global:TargetUser.RecipientTypeDetails.ToString() }
         }
+    }
+    else {
+        $MailboxType = "Unknown"
     }
 
     $UserRunning = $true

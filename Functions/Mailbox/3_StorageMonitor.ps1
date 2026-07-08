@@ -5,40 +5,26 @@ function Invoke-StorageMonitor {
     $MonitoringUser = $true
 
     # --- INITIAL ARCHITECTURE METADATA ACQUISITION ---
-    if ($Global:SandboxMode) {
-        $mbxCreated = (Get-Date).AddDays(-742).ToString("yyyy/MM/dd")
-        $mbxAgeDays = 742
-        $policyName = "Enterprise-Standard-MRM-Policy"
-        $archiveTags = @(
-            [PSCustomObject]@{ Name = "Default 2-Year Move to Archive"; AgeLimitForRetention = "730.00:00:00" },
-            [PSCustomObject]@{ Name = "Recoverable Items 14-Day Purge"; AgeLimitForRetention = "14.00:00:00" }
-        )
-        $primaryQuota = 50GB
-        $archiveQuota = 100GB
-        $startSizeMB = 45000.00
-        $isArchiveEnabled = $true
-    } else {
-        Write-Host "Fetching historical directory provisioning metrics..." -ForegroundColor Gray
-        try {
-            $Mbx = Get-Mailbox -Identity $Identity -ErrorAction Stop
-            $mbxCreated = if ($Mbx.WhenCreated) { $Mbx.WhenCreated.ToString("yyyy/MM/dd") } else { "Unknown" }
-            $mbxAgeDays = if ($Mbx.WhenCreated) { [math]::Round(((Get-Date) - $Mbx.WhenCreated).TotalDays) } else { 0 }
-            $policyName = if ($Mbx.RetentionPolicy) { $Mbx.RetentionPolicy } else { "No Policy Assigned" }
-            
-            $primaryQuota = Get-RawBytes $Mbx.ProhibitSendQuota
-            $archiveQuota = Get-RawBytes $Mbx.ArchiveQuota
-            $isArchiveEnabled = ($Mbx.ArchiveStatus -match "Active|Enabled")
+    Write-Host "Fetching historical directory provisioning metrics..." -ForegroundColor Gray
+    try {
+        $Mbx = Get-Mailbox -Identity $Identity -ErrorAction Stop
+        $mbxCreated = if ($Mbx.WhenCreated) { $Mbx.WhenCreated.ToString("yyyy/MM/dd") } else { "Unknown" }
+        $mbxAgeDays = if ($Mbx.WhenCreated) { [math]::Round(((Get-Date) - $Mbx.WhenCreated).TotalDays) } else { 0 }
+        $policyName = if ($Mbx.RetentionPolicy) { $Mbx.RetentionPolicy } else { "No Policy Assigned" }
+        
+        $primaryQuota = Get-RawBytes $Mbx.ProhibitSendQuota
+        $archiveQuota = Get-RawBytes $Mbx.ArchiveQuota
+        $isArchiveEnabled = ($Mbx.ArchiveStatus -match "Active|Enabled")
 
-            $CurrentStats = Get-MailboxStatistics -Identity $Identity -ErrorAction Stop
-            $startSizeMB = [math]::Round((Get-RawBytes $CurrentStats.TotalItemSize) / 1MB, 2)
-            
-            # Fetch tags dynamically from assigned Exchange policy container
-            $archiveTags = if ($Mbx.RetentionPolicy) { Get-ArchiveTagsFromPolicy -PolicyName $Mbx.RetentionPolicy } else { @() }
-        } catch {
-            Write-Host "Error acquiring pipeline instrumentation: $_" -ForegroundColor Red
-            Wait-Console
-            return
-        }
+        $CurrentStats = Get-MailboxStatistics -Identity $Identity -ErrorAction Stop
+        $startSizeMB = [math]::Round((Get-RawBytes $CurrentStats.TotalItemSize) / 1MB, 2)
+        
+        # Fetch tags dynamically from assigned Exchange policy container
+        $archiveTags = if ($Mbx.RetentionPolicy) { Get-ArchiveTagsFromPolicy -PolicyName $Mbx.RetentionPolicy } else { @() }
+    } catch {
+        Write-Host "Error acquiring pipeline instrumentation: $_" -ForegroundColor Red
+        Wait-Console
+        return
     }
 
     # --- RUNTIME LIVE STREAM LOOP ---
@@ -47,18 +33,14 @@ function Invoke-StorageMonitor {
             $Elapsed = (Get-Date) - $StartTime
             $ElapsedClock = $Elapsed.ToString("hh\:mm\:ss")
 
-            if ($Global:SandboxMode) {
-                $currentSizeMB = 44990; $archSizeMB = 12000
-            } else {
-                $CurrentStats = Get-MailboxStatistics -Identity $Identity -ErrorAction Stop
-                $currentSizeMB = [math]::Round((Get-RawBytes $CurrentStats.TotalItemSize) / 1MB, 2)
-                $archSizeMB = 0
-                if ($isArchiveEnabled) {
-                    try {
-                        $CurrentArchive = Get-MailboxStatistics -Identity $Identity -Archive -ErrorAction Stop
-                        $archSizeMB = [math]::Round((Get-RawBytes $CurrentArchive.TotalItemSize) / 1MB, 2)
-                    } catch { $archSizeMB = 0 }
-                }
+            $CurrentStats = Get-MailboxStatistics -Identity $Identity -ErrorAction Stop
+            $currentSizeMB = [math]::Round((Get-RawBytes $CurrentStats.TotalItemSize) / 1MB, 2)
+            $archSizeMB = 0
+            if ($isArchiveEnabled) {
+                try {
+                    $CurrentArchive = Get-MailboxStatistics -Identity $Identity -Archive -ErrorAction Stop
+                    $archSizeMB = [math]::Round((Get-RawBytes $CurrentArchive.TotalItemSize) / 1MB, 2)
+                } catch { $archSizeMB = 0 }
             }
 
             $primaryLimitMB = [math]::Round($primaryQuota / 1MB, 2)
