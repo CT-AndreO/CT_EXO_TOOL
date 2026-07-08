@@ -1,18 +1,25 @@
 function Invoke-SignIn {
     Clear-Host
     Write-Host "=== EXCHANGE ONLINE AUTHENTICATION ===" -ForegroundColor Cyan
-    Write-Host "Launching Microsoft sign-in prompt..." -ForegroundColor Gray
-
+    
     try {
-        # Connect natively. If an active session already exists, ExchangeOnlineManagement 
-        # is smart enough to leverage existing access tokens or offer account switching.
-        Connect-ExchangeOnline -ErrorAction Stop
-        Write-Host "Successfully authenticated." -ForegroundColor Green
+        Write-Host "Loading ExchangeOnlineManagement module..." -ForegroundColor Gray
+        Import-Module ExchangeOnlineManagement -ErrorAction Stop
+
+        Write-Host "Launching Microsoft sign-in prompt..." -ForegroundColor Gray
+        Connect-ExchangeOnline -ShowBanner:$false -ErrorAction Stop
+        
+        # Capture the true tenant string for your menus
+        Write-Host "Retrieving organizational context..." -ForegroundColor Gray
+        $Global:TenantName = (Get-OrganizationConfig).DisplayName
+        
+        Write-Host "Successfully authenticated to: $Global:TenantName" -ForegroundColor Green
         Start-Sleep -Seconds 1
     }
     catch {
-        Write-Host "Authentication failed: $_" -ForegroundColor Red
-        Read-Host "`nPress Enter to close the script..."
-        Exit
+        Write-Host "`n[AUTHENTICATION ERROR] Failed to connect to Exchange Online." -ForegroundColor Red
+        Write-Host "Details: $_" -ForegroundColor Red
+        Write-Host "--------------------------------------------------" -ForegroundColor DarkRed
+        $Global:TenantName = "Disconnected"
     }
 }

@@ -4,12 +4,14 @@ function Invoke-SwitchTenant {
     Write-Host "Tearing down current Exchange Online connection context..." -ForegroundColor Gray
 
     try {
-        # Drops the current session without asking for terminal confirmations
         Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
         Write-Host "Session dropped successfully." -ForegroundColor Green
+        
+        # Reset the layout values back to baseline
+        $Global:TenantName = "Disconnected"
         Start-Sleep -Seconds 1
         
-        # Immediately hand execution back to the authentication block for the next tenant
+        # Run sign-in again for the next client space
         Invoke-SignIn
     }
     catch {
