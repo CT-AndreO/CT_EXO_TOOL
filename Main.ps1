@@ -30,7 +30,6 @@ if (-not $ActiveSession) {
 # --- 3. MAIN ROUTER ---
 while ($ScriptRunning) {
     Clear-Host
-    # Dynamically renders the active client tenant name in the main banner
     Write-Host "=== EXO MANAGEMENT TOOL [$Global:TenantName] ===" -ForegroundColor Cyan
     Write-Host "1. Single User Management"
     Write-Host "2. Bulk Operations & Reporting"
@@ -45,8 +44,11 @@ while ($ScriptRunning) {
             while ($InSearchSession) {
                 $Global:TargetUser = Invoke-Search
                 if ($null -ne $Global:TargetUser) {
-                    Write-Host "Target User Acquired: $($Global:TargetUser.UserPrincipalName)" -ForegroundColor Green
-                    Read-Host "Press Enter to continue..."
+                    
+                    # FIXED: Removed the testing placeholder and mapped the true UI engine call
+                    Invoke-UserMenu    
+                    
+                    # Context clears out when the tech exits the user sub-menu back into search
                     $Global:TargetUser = $null
                 } else {
                     $InSearchSession = $false

@@ -10,11 +10,24 @@ function Invoke-Search {
 
         Write-Host "Searching directory..." -ForegroundColor Gray
         
-        # Pulling mailboxes directly so we have the Exchange data structure ready to pass
-        $FilterString = "DisplayName -like '*$Query*' -or UserPrincipalName -like '*$Query*' -or PrimarySmtpAddress -like '*$Query*'"
-        $Results = Get-Mailbox -ResultSize Unlimited -Filter $FilterString -ErrorAction SilentlyContinue
+        try {
+            if ($Query.Length -lt 3) {
+                # Fallback for short queries (1-2 chars). Trailing wildcards are highly indexed and legal.
+                $FilterString = "DisplayName -like '$Query*' -or Alias -like '$Query*' -or UserPrincipalName -like '$Query*'"
+                [array]$Results = Get-Mailbox -ResultSize Unlimited -Filter $FilterString -ErrorAction Stop
+            } else {
+                # Standard high-speed ambiguous name resolution for 3+ characters
+                [array]$Results = Get-Mailbox -ResultSize Unlimited -Anr $Query -ErrorAction Stop
+            }
+        }
+        catch {
+            Write-Host "`n[SEARCH ERROR] Directory lookup failed." -ForegroundColor Red
+            Write-Host "Details: $_" -ForegroundColor Red
+            Read-Host "`nPress Enter to try again..."
+            continue
+        }
 
-        if (-not $Results) {
+        if ($Results.Count -eq 0) {
             Write-Host "No matching mailboxes found." -ForegroundColor Red
             Start-Sleep -Seconds 1.5
             continue
@@ -22,11 +35,11 @@ function Invoke-Search {
 
         # Scenario A: Perfect Single Match
         if ($Results.Count -eq 1) {
-            return $Results
+            return $Results[0]
         }
 
         # Scenario B: Multiple Matches Found
-        Write-Host "`nMultiple users found matching your query:" -ForegroundColor Yellow
+        Write-Host "`nMultiple users found matching '$Query':" -ForegroundColor Yellow
         for ($i = 0; $i -lt $Results.Count; $i++) {
             Write-Host ("{0}. {1} ({2})" -f ($i + 1), $Results[$i].DisplayName, $Results[$i].UserPrincipalName)
         }
@@ -37,12 +50,14 @@ function Invoke-Search {
             continue
         }
 
-        if ([int]::TryParse($Selection, [ref]$Index) -and $Index -le $Results.Count -and $Index -gt 0) {
-            return $Results[$Index - 1]
+        if ($Selection -match '^\d+$') {
+            $Index = [int]$Selection
+            if ($Index -le $Results.Count -and $Index -gt 0) {
+                return $Results[$Index - 1]
+            }
         }
-        else {
-            Write-Host "Invalid entry." -ForegroundColor Red
-            Start-Sleep -Seconds 1
-        }
+        
+        Write-Host "Invalid entry." -ForegroundColor Red
+        Start-Sleep -Seconds 1
     }
 }
