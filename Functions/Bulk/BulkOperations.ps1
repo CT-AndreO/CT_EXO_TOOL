@@ -194,15 +194,16 @@ function Invoke-InteractiveMatrixAuditor {
         
         # Dynamic execution console command menu parameters based on active context
         if ($Global:ActiveView -eq "Storage") {
-            Write-Host " CLOUD PRODUCTION STORAGE PIPELINES (ARMED OBJECTS TARGETED):" -ForegroundColor Magenta
+            Write-Host " CLOUD PRODUCTION STORAGE PIPELINES (USERS TARGETED):" -ForegroundColor Magenta
             Write-Host "  [STOR0] Current Target Switch Action Mode Toggle (Current: $Global:StorageAction)" -ForegroundColor White
             Write-Host "  [STOR1] Bulk Process Core Online Archiving Infrastructure Layers"
             Write-Host "  [STOR2] Bulk Process Engine Auto Expanding Storage Parameters"
             Write-Host "  [STOR3] Bulk Process BOTH Online Archive & Auto Expansion Features"
         } else {
-            Write-Host " CLOUD PRODUCTION DELEGATION PIPELINES (ARMED OBJECTS TARGETED):" -ForegroundColor Magenta
+            Write-Host " CLOUD PRODUCTION DELEGATION PIPELINES (USERS TARGETED):" -ForegroundColor Magenta
             Write-Host "  [SEND0] Current Target Operation Action Mode Toggle (Current: $Global:DelegateAction)" -ForegroundColor White
-            Write-Host "  [SEND1] Select SendAs Permission Rule | [SEND2] Select SendOnBehalf Permission Rule"
+            Write-Host "  [SEND1] Select SendAs Permission Rule"
+            Write-Host "  [SEND2] Select SendOnBehalf Permission Rule"
             Write-Host "  [SEND3] Select FullAccess Permission Rule"
             Write-Host "  [SEND]  EXECUTE BULK PERMISSION DELEGATION PROVISIONING TASK" -ForegroundColor Green
         }
@@ -294,7 +295,7 @@ function Invoke-InteractiveMatrixAuditor {
 
             "R" {
                 $Global:CentralMailboxCache = $null
-                Write-Host "`nFlushing local cache layers..." -ForegroundColor Yellow
+                Write-Host "`nFlushing local cache..." -ForegroundColor Yellow
                 Start-Sleep -Seconds 1
                 return "REFRESH" 
             }
@@ -401,7 +402,7 @@ function Invoke-InteractiveMatrixAuditor {
                 foreach ($t in $Targets) { Write-Host $t.UserPrincipalName -ForegroundColor Cyan }
                 Write-Host "========================================"
                 
-                $Confirm = Read-Host "`nCommit live infrastructure updates to Microsoft 365? (Y/YES/NO)"
+                $Confirm = Read-Host "`nCommit updates to Microsoft 365? (YES/NO)"
                 if ($Confirm.ToUpper().Trim() -match '^(Y|YES)$') {
                     foreach ($t in $Targets) {
                         try {
@@ -437,7 +438,7 @@ function Invoke-InteractiveMatrixAuditor {
                 foreach ($t in $Targets) { Write-Host $t.UserPrincipalName -ForegroundColor Cyan }
                 Write-Host "========================================"
                 
-                $Confirm = Read-Host "`nCommit live infrastructure updates to Microsoft 365? (Y/YES/NO)"
+                $Confirm = Read-Host "`nCommit updates to Microsoft 365? (YES/NO)"
                 if ($Confirm.ToUpper().Trim() -match '^(Y|YES)$') {
                     foreach ($t in $Targets) {
                         try {
@@ -472,7 +473,7 @@ function Invoke-InteractiveMatrixAuditor {
                 foreach ($t in $Targets) { Write-Host $t.UserPrincipalName -ForegroundColor Cyan }
                 Write-Host "========================================"
                 
-                $Confirm = Read-Host "`nCommit live infrastructure updates to Microsoft 365? (Y/YES/NO)"
+                $Confirm = Read-Host "`nCommit updates to Microsoft 365? (Y/YES/NO)"
                 if ($Confirm.ToUpper().Trim() -match '^(Y|YES)$') {
                     foreach ($t in $Targets) {
                         try {
