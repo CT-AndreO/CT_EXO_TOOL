@@ -44,11 +44,7 @@ while ($ScriptRunning) {
             while ($InSearchSession) {
                 $Global:TargetUser = Invoke-Search
                 if ($null -ne $Global:TargetUser) {
-                    
-                    # FIXED: Removed the testing placeholder and mapped the true UI engine call
                     Invoke-UserMenu    
-                    
-                    # Context clears out when the tech exits the user sub-menu back into search
                     $Global:TargetUser = $null
                 }
                 else {

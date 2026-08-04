@@ -365,21 +365,17 @@ function Show-RulesPaginationEngine {
             Write-Host "`n--- TOTAL USERS ---" -ForegroundColor Cyan
             $RuleName = Read-Host "Enter Unique Identifiable Rule Container Name"
             $Days = Read-Host "Enter Age Evaluation Threshold Window (In Days)"
-            
-            if ($Global:SandboxMode) {
-                Write-Host "`n[SANDBOX] Asset Matrix Generated: $RuleName ($Days Days)" -ForegroundColor Green
-                $Global:SandboxPolicy = $RuleName
-            } else {
-                try {
-                    Write-Host "Compiling metadata tag configurations..." -ForegroundColor Gray
-                    $NewTag = New-RetentionPolicyTag -Name "$RuleName-Tag" -Type All -RetentionEnabled $true -AgeLimitForRetention $Days -RetentionAction MoveToArchive -ErrorAction Stop
-                    Write-Host "Constructing global execution container reference..." -ForegroundColor Gray
-                    New-RetentionPolicy -Name $RuleName -RetentionPolicyTagLinks $NewTag.Name -ErrorAction Stop
-                    Write-Host "`nObject instantiation sequence successfully deployed!" -ForegroundColor Green
-                } catch {
-                    Write-Host "`nDeployment sequence execution failure: $($_.Exception.Message)" -ForegroundColor Red
-                }
+  
+            try {
+                Write-Host "Compiling metadata tag configurations..." -ForegroundColor Gray
+                $NewTag = New-RetentionPolicyTag -Name "$RuleName-Tag" -Type All -RetentionEnabled $true -AgeLimitForRetention $Days -RetentionAction MoveToArchive -ErrorAction Stop
+                Write-Host "Constructing global execution container reference..." -ForegroundColor Gray
+                New-RetentionPolicy -Name $RuleName -RetentionPolicyTagLinks $NewTag.Name -ErrorAction Stop
+                Write-Host "`nObject instantiation sequence successfully deployed!" -ForegroundColor Green
+            } catch {
+                Write-Host "`nDeployment sequence execution failure: $($_.Exception.Message)" -ForegroundColor Red
             }
+
             Wait-Console
             $Paginating = $false
         } 

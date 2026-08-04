@@ -7,13 +7,12 @@ function Invoke-BulkMenu {
 
     $MenuRunning = $true
     while ($MenuRunning) {
-        # === 1. PERSISTENT LIVE SESSION CACHE GENERATOR (WARNING INSULATED) ===
         if ($null -eq $Global:CentralMailboxCache) {
             Clear-Host
             Write-Host "=====================================================================" -ForegroundColor Cyan
             Write-Host "         INITIALIZING CENTRAL LIVE TENANT SESSION CACHE             " -ForegroundColor Cyan
             Write-Host "=====================================================================" -ForegroundColor Cyan
-            Write-Host "Querying Exchange Online directory endpoints safely..." -ForegroundColor Gray
+            Write-Host "Querying Exchange Online directory endpoints..." -ForegroundColor Gray
 
             $ParseBytes = {
                 param($Property)
@@ -33,7 +32,7 @@ function Invoke-BulkMenu {
                 $Count = 0
                 $Total = $RawMailboxes.Count
 
-                Write-Host "`n[SUCCESS] Discovered $Total total mailboxes in tenant. Commencing metrics processing...`n" -ForegroundColor Green
+                Write-Host "`n[SUCCESS] Discovered $Total total mailboxes in tenant. Processing Metrics...`n" -ForegroundColor Green
                 Start-Sleep -Seconds 1
 
                 foreach ($mbx in $RawMailboxes) {
@@ -121,7 +120,7 @@ function Invoke-InteractiveMatrixAuditor {
 
         # === GRID HEADER INTERFACE ===
         Write-Host "=========================================================================================================" -ForegroundColor Cyan
-        Write-Host "                                LIVE EXCHANGE ONLINE AUDIT & CONFIGURATION MATRIX                         " -ForegroundColor Cyan
+        Write-Host "                                LIVE EXCHANGE ONLINE AUDIT & CONFIGURATION                               " -ForegroundColor Cyan
         Write-Host "=========================================================================================================" -ForegroundColor Cyan
         
         # Display Active View Layer configuration settings
@@ -188,7 +187,7 @@ function Invoke-InteractiveMatrixAuditor {
         Write-Host "  [#] Toggle selection index state         | [T] Change Threshold Values (Primary/Archive)" -ForegroundColor Gray
         Write-Host "  [V] Run Auto Selection Evaluation Pass   | [E] Export Current Directory to Excel Friendly CSV" -ForegroundColor Yellow
         Write-Host "  [A] Select All | [D] Clear All Choices   | [L] Toggle License Guardrail Filter" -ForegroundColor Gray
-        Write-Host "  [VIEW1] Switch to Storage Matrix Layout  | [VIEW2] Switch to Delegation Rules Matrix Layout" -ForegroundColor White
+        Write-Host "  [VIEW1] Switch to Storage  Layout        | [VIEW2] Switch to Delegation Rules Matrix Layout" -ForegroundColor White
         Write-Host "  [R] Force Flush & Re scan Live Cache Metrics" -ForegroundColor DarkGray
         Write-Host "========================================================================================================="
         

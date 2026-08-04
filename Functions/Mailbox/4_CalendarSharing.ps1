@@ -42,7 +42,7 @@ function Show-OutboundPermissions {
     
     Clear-Host
     Write-Host "=========================================================================================================" -ForegroundColor Gray
-    Write-Host " OUTBOUND PERMISSIONS MATRIX | CALENDAR: $CalendarIdentity" -ForegroundColor Cyan
+    Write-Host " OUTBOUND PERMISSIONS | CALENDAR: $CalendarIdentity" -ForegroundColor Cyan
     Write-Host "=========================================================================================================" -ForegroundColor Gray
     Write-Host "Querying Exchange Online..." -ForegroundColor Gray
 
@@ -51,7 +51,7 @@ function Show-OutboundPermissions {
         
         Clear-Host
         Write-Host "=========================================================================================================" -ForegroundColor Gray
-        Write-Host " OUTBOUND PERMISSIONS MATRIX | CALENDAR: $CalendarIdentity" -ForegroundColor Cyan
+        Write-Host " OUTBOUND PERMISSIONS | CALENDAR: $CalendarIdentity" -ForegroundColor Cyan
         Write-Host "=========================================================================================================" -ForegroundColor Gray
         
         $FormatStr = "{0,-40} {1,-25} {2,-20}"
