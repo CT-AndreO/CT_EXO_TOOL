@@ -8,11 +8,6 @@ $Global:SandboxMode = $false  # Set to $false for real environment execution
 $ScriptRunning      = $true
 $RefreshIntervalSeconds = 30
 
-# Mock states for Sandbox Mode tracking
-$Global:SandboxArchiveEnabled   = $true
-$Global:SandboxAutoExpandEnabled = $false
-$Global:SandboxPolicy            = "Default-Archival-Policy"
-
 # ---------------- GLOBAL HELPER FUNCTIONS ----------------
 
 function Get-RawBytes {

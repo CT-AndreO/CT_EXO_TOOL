@@ -40,6 +40,7 @@ function Invoke-UserMenu {
         Write-Host "1. Manage Archival Rules"
         Write-Host "2. Manage Auto Expansion"
         Write-Host "3. Monitor Mailbox Storage (Live Analytics)"
+        Write-Host "4. Manage Calendar Sharing"
         Write-Host "0. Back to User Search"
 
         $Choice = Read-Host "`nSelection"
@@ -48,6 +49,7 @@ function Invoke-UserMenu {
             "1" { Invoke-ManageArchive }
             "2" { Invoke-ManageExpansion }
             "3" { Invoke-StorageMonitor }
+            "4" { Invoke-CalendarSharing }
             "0" { $UserRunning = $false }
             Default { 
                 Write-Host "Invalid Selection." -ForegroundColor Red
