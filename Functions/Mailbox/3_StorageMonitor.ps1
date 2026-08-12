@@ -52,7 +52,7 @@ function Invoke-StorageMonitor {
             Clear-Host
             Write-Host " Monitoring Account Mailbox Storage: $Identity " -BackgroundColor Blue -ForegroundColor White
             Write-Host " Latest Update: $(Get-Date -Format T)" -ForegroundColor Gray
-            Write-Host " Hotkeys: [R] Immediate Refresh | [B] Terminate Analytics Loop" -ForegroundColor Gray
+            Write-Host " Hotkeys: [R] Immediate Refresh | [B] Exit Mail Analytics" -ForegroundColor Gray
             Write-Host "------------------------------------------------------------"
             Write-Host " PROVISIONED TIMESTAMPS: $mbxCreated (Object Lifespan: $mbxAgeDays days)" -ForegroundColor Cyan
             Write-Host "------------------------------------------------------------"
