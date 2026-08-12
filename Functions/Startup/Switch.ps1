@@ -1,7 +1,7 @@
 function Invoke-SwitchTenant {
     Clear-Host
     Write-Host "=== SWITCH TENANT / SIGN OUT ===" -ForegroundColor Cyan
-    Write-Host "Tearing down current Exchange Online connection context..." -ForegroundColor Gray
+    Write-Host "Disconnecting current Exchange Online connection..." -ForegroundColor Gray
 
     try {
         Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue

@@ -88,10 +88,10 @@ function Invoke-BulkMenu {
                     }
                 }
                 
-                Write-Progress -Activity "Compiling Live Tenant Mailbox Analytics" -Completed
+                Write-Progress -Activity "Compiling Live Mailbox Analytics" -Completed
             }
             catch {
-                Write-Host "[CRITICAL ERROR] Failed to capture tenant data stream pipeline: $_" -ForegroundColor Red
+                Write-Host "[CRITICAL ERROR] Failed to capture tenant data: $_" -ForegroundColor Red
                 $Global:CentralMailboxCache = $null
                 Read-Host "`nPress Enter to return to main menu..."
                 return
@@ -145,8 +145,9 @@ function Invoke-InteractiveMatrixAuditor {
             $FormatStr = "{0,-4} {1,-6} {2,-22} {3,-8} {4,-5} {5,-22} {6,-24}"
             Write-Host ($FormatStr -f "ID", "STATE", "DISPLAY NAME", "TYPE", "LIC", "PRIMARY UTILIZATION", "ONLINE ARCHIVE UTIL") -ForegroundColor White
         } else {
-            $FormatStr = "{0,-4} {1,-6} {2,-22} {3,-8} {4,-5} {5,-52}"
-            Write-Host ($FormatStr -f "ID", "STATE", "DISPLAY NAME", "TYPE", "LIC", "TARGET TENANT USER PRINCIPAL NAME TARGET") -ForegroundColor White
+            # Revised View 2: Added spacing and included Retention Policy for better context during delegation
+            $FormatStr = "{0,-4} {1,-6} {2,-25} {3,-8} {4,-5} {5,-35} {6,-20}"
+            Write-Host ($FormatStr -f "ID", "STATE", "DISPLAY NAME", "TYPE", "LIC", "USER PRINCIPAL NAME", "RETENTION POLICY") -ForegroundColor White
         }
         Write-Host "========================================================================================================="
 
@@ -166,7 +167,8 @@ function Invoke-InteractiveMatrixAuditor {
                 }
                 $RowString = $FormatStr -f $mbx.Idx, $StateCheckbox, $mbx.DisplayName, $TypeStr, $LicStr, $PrimaryUtilStr, $ArchiveUtilStr
             } else {
-                $RowString = $FormatStr -f $mbx.Idx, $StateCheckbox, $mbx.DisplayName, $TypeStr, $LicStr, $mbx.UserPrincipalName
+                # Revised View 2 Data Mapping
+                $RowString = $FormatStr -f $mbx.Idx, $StateCheckbox, $mbx.DisplayName, $TypeStr, $LicStr, $mbx.UserPrincipalName, $mbx.RetentionPolicy
             }
 
             $QualifiesPrimary = (-not $mbx.ArchiveEnabled -and $mbx.PrimaryPercentUsed -ge $PrimaryThreshold)
@@ -187,7 +189,7 @@ function Invoke-InteractiveMatrixAuditor {
         Write-Host "  [#] Toggle selection index state         | [T] Change Threshold Values (Primary/Archive)" -ForegroundColor Gray
         Write-Host "  [V] Run Auto Selection Evaluation Pass   | [E] Export Current Directory to Excel Friendly CSV" -ForegroundColor Yellow
         Write-Host "  [A] Select All | [D] Clear All Choices   | [L] Toggle License Guardrail Filter" -ForegroundColor Gray
-        Write-Host "  [VIEW1] Switch to Storage  Layout        | [VIEW2] Switch to Delegation Rules Matrix Layout" -ForegroundColor White
+        Write-Host "  [VIEW1] Switch to Storage Layout         | [VIEW2] Switch to Delegation Rules Matrix Layout" -ForegroundColor White
         Write-Host "  [R] Force Flush & Re scan Live Cache Metrics" -ForegroundColor DarkGray
         Write-Host "========================================================================================================="
         

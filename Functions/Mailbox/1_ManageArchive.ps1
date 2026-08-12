@@ -51,7 +51,7 @@ function Invoke-ManageArchive {
         switch ($Choice) {
             "1" {
                 if ($ArchiveStatus) {
-                    Write-Host "`nRequesting Archive Provision Reversal..." -ForegroundColor Gray
+                    Write-Host "`nRequesting Archival Status..." -ForegroundColor Gray
                     try { Disable-Mailbox -Identity $Identity -Archive -Confirm:$false -ErrorAction Stop }
                     catch { Write-Host "Execution Halted: $($_.Exception.Message)" -ForegroundColor Red; Wait-Console }
                 }

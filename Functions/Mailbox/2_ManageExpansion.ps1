@@ -42,10 +42,10 @@ function Invoke-ManageExpansion {
                     }
                 }
                 else {
-                    Write-Host "`nInitializing deployment storage expander layers..." -ForegroundColor Gray
+                    Write-Host "`nInitializing Auto Expansion..." -ForegroundColor Gray
                     try {
                         Enable-Mailbox -Identity $Identity -AutoExpandingArchive -ErrorAction Stop
-                        Write-Host "Storage expansion layers provisioned successfully!" -ForegroundColor Green
+                        Write-Host "Auto Expansion provisioned successfully!" -ForegroundColor Green
                     }
                     catch {
                         Write-Host "Deployment initialization validation failure: $($_.Exception.Message)" -ForegroundColor Red
