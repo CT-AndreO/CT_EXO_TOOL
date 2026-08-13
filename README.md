@@ -11,15 +11,6 @@ Just double click Run.bat to launch.
 (Using the batch file automatically bypasses PowerShell execution policies, there is no need to mess with local security settings).
 
 ---
-### Program Breakdown
-
-Here is a quick breakdown of how the tool is organized:
-
-- **Startup**: Handles the connection, dependency checks, and tenant switching.
-- **Mailbox**: The single-user hub. Search for a specific user to check their storage, manage their archive limits, or fix calendar permissions.
-- **Bulk**: Scripts for running actions or exporting reports for multiple users at once.
-
----
 ```
 EXO_Tool/
 │
