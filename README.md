@@ -2,7 +2,7 @@
 
 A lightweight powershell based tool to simplify management of auto archival, auto expansion, calendar delegation, and bulk management for mailboxes/calendars.
 
-It handles the Exchange Online module loading for you and shows your current tenant right in the menu, making it easy to switch environments on the fly.
+It handles the Exchange Online module loading for you and shows your current tenant right in the menu, making it easy to switch tenants.
 
 ---
 ### Running the programme
