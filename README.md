@@ -1,6 +1,6 @@
 # EXO Tool - Microsoft Exchange Online Administration Utility
 
-A lightweight, enterprise-ready, modular PowerShell management suite designed for Microsoft 365 / Exchange Online (EXO) administrators, IT engineers, and MSPs. **EXO Tool** streamlines routine administration tasks, reporting, mailbox storage optimization, calendar delegation, and security auditing across single or multiple tenants.
+A lightweight, enterprise-ready, modular PowerShell management suite designed for Microsoft 365 / Exchange Online which aims to steamline routine administration tasks, reporting, mailbox storage optimization, calendar delegation, and security auditing across single or multiple tenants.
 
 ---
 
