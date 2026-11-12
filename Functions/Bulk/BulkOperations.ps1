@@ -1,66 +1,67 @@
 function Invoke-BulkMenu {
-    # Initialize all view state tracking registers
-    $Global:ActiveView = "Storage"
-    $Global:StorageAction = "Enable"
-    $Global:DelegateAction = "Add"
-    $Global:SelectedDelegation = "None"
+    if ($Global:TenantName -eq "Disconnected") {
+        Clear-Host
+        Write-Host "=====================================================================" -ForegroundColor Red
+        Write-Host "                         NO ACTIVE CONNECTION                        " -ForegroundColor Red
+        Write-Host "=====================================================================" -ForegroundColor Red
+        Write-Host "You must authenticate to Exchange Online before accessing Bulk Operations." -ForegroundColor Yellow
+        Wait-Console "Press Enter to return..."
+        return
+    }
+
+    # Initialize view registers if unset
+    if ($null -eq $Global:ActiveView) { $Global:ActiveView = "Storage" }
+    if ($null -eq $Global:StorageAction) { $Global:StorageAction = "Enable" }
+    if ($null -eq $Global:DelegateAction) { $Global:DelegateAction = "Add" }
+    if ($null -eq $Global:SelectedDelegation) { $Global:SelectedDelegation = "None" }
 
     $MenuRunning = $true
     while ($MenuRunning) {
         if ($null -eq $Global:CentralMailboxCache) {
             Clear-Host
             Write-Host "=====================================================================" -ForegroundColor Cyan
-            Write-Host "         INITIALIZING CENTRAL LIVE TENANT SESSION CACHE             " -ForegroundColor Cyan
+            Write-Host "              INITIALIZING TENANT MAILBOX AUDIT CACHE                " -ForegroundColor Cyan
             Write-Host "=====================================================================" -ForegroundColor Cyan
-            Write-Host "Querying Exchange Online directory endpoints..." -ForegroundColor Gray
-
-            $ParseBytes = {
-                param($Property)
-                if ($null -eq $Property) { return 0 }
-                $StrValue = $Property.ToString()
-                if ($StrValue -eq "Unlimited") { return 100GB } 
-                if ($StrValue -match '\((?<bytes>[\d,]+)\s+bytes\)') {
-                    return [int64]($Matches.bytes -replace ',', '')
-                }
-                return 0
-            }
+            Write-Host "Querying Exchange Online directory endpoints for $Global:TenantName..." -ForegroundColor Gray
 
             try {
-                # Suppressing pipeline warnings to prevent UI text corruption
-                $RawMailboxes = Get-Mailbox -ResultSize Unlimited -RecipientTypeDetails UserMailbox, SharedMailbox -ErrorAction Stop -WarningAction SilentlyContinue
-                $Global:CentralMailboxCache = @()
+                # Retrieve user and shared mailboxes
+                $RawMailboxes = @(Get-Mailbox -ResultSize Unlimited -RecipientTypeDetails UserMailbox, SharedMailbox -ErrorAction Stop -WarningAction SilentlyContinue)
+                $CacheList = [System.Collections.Generic.List[PSCustomObject]]::new()
                 $Count = 0
                 $Total = $RawMailboxes.Count
 
-                Write-Host "`n[SUCCESS] Discovered $Total total mailboxes in tenant. Processing Metrics...`n" -ForegroundColor Green
-                Start-Sleep -Seconds 1
+                Write-Host "`n[SUCCESS] Discovered $Total mailboxes in tenant. Compiling metrics...`n" -ForegroundColor Green
+                Start-Sleep -Milliseconds 600
 
                 foreach ($mbx in $RawMailboxes) {
                     $Count++
-                    Write-Progress -Activity "Compiling Live Tenant Mailbox Analytics" -Status "Processing ($Count/$Total): $($mbx.UserPrincipalName)" -PercentComplete (($Count / $Total) * 100)
+                    Write-Progress -Activity "Compiling Tenant Mailbox Analytics" -Status "Processing ($Count/$Total): $($mbx.UserPrincipalName)" -PercentComplete (($Count / $Total) * 100)
 
-                    # Suppress statistical warnings leaking into the console buffer
                     $stat = Get-MailboxStatistics -Identity $mbx.UserPrincipalName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
-                    $PrimarySizeBytes = & $ParseBytes ($stat.TotalItemSize)
+                    $PrimarySizeBytes = Get-RawBytes $stat.TotalItemSize
                     $PrimarySizeGB = [math]::Round($PrimarySizeBytes / 1GB, 2)
 
-                    $QuotaBytes = & $ParseBytes ($mbx.ProhibitSendReceiveQuota)
-                    if ($QuotaBytes -eq 0) { $QuotaBytes = 50GB } 
-                    $PrimaryQuotaGB = [math]::Round($QuotaBytes / 1GB, 2)
+                    $QuotaBytes = Get-RawBytes $mbx.ProhibitSendReceiveQuota
+                    if ($QuotaBytes -eq 0 -or [double]::IsPositiveInfinity($QuotaBytes)) { 
+                        $PrimaryQuotaGB = 50.0 
+                    } else {
+                        $PrimaryQuotaGB = [math]::Round($QuotaBytes / 1GB, 2)
+                    }
                     $PrimaryPercentUsed = if ($PrimaryQuotaGB -gt 0) { [math]::Round(($PrimarySizeGB / $PrimaryQuotaGB) * 100, 1) } else { 0 }
 
                     $ArchiveSizeGB = 0.0
                     $ArchiveQuotaGB = 100.0
                     $ArchivePercentUsed = 0.0
-                    $ArchiveActive = ($mbx.ArchiveStatus -eq "Active" -or $mbx.ArchiveStatus -eq "Local")
+                    $ArchiveActive = ($mbx.ArchiveStatus -eq "Active" -or $mbx.ArchiveStatus -eq "Local" -or $mbx.ArchiveStatus -eq "Enabled")
 
                     if ($ArchiveActive) {
                         $archiveStat = Get-MailboxStatistics -Identity $mbx.UserPrincipalName -Archive -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
-                        $ArchiveSizeBytes = & $ParseBytes ($archiveStat.TotalItemSize)
+                        $ArchiveSizeBytes = Get-RawBytes $archiveStat.TotalItemSize
                         $ArchiveSizeGB = [math]::Round($ArchiveSizeBytes / 1GB, 2)
 
-                        $ArchiveQuotaBytes = & $ParseBytes ($mbx.ArchiveQuota)
-                        if ($ArchiveQuotaBytes -gt 0) {
+                        $ArchiveQuotaBytes = Get-RawBytes $mbx.ArchiveQuota
+                        if ($ArchiveQuotaBytes -gt 0 -and -not [double]::IsPositiveInfinity($ArchiveQuotaBytes)) {
                             $ArchiveQuotaGB = [math]::Round($ArchiveQuotaBytes / 1GB, 2)
                         }
                         $ArchivePercentUsed = if ($ArchiveQuotaGB -gt 0) { [math]::Round(($ArchiveSizeGB / $ArchiveQuotaGB) * 100, 1) } else { 0 }
@@ -69,7 +70,7 @@ function Invoke-BulkMenu {
                     $IsShared = ($mbx.RecipientTypeDetails -eq 'SharedMailbox')
                     $IsLicensed = if ($IsShared) { $false } else { $true }
 
-                    $Global:CentralMailboxCache += [PSCustomObject]@{
+                    $CacheList.Add([PSCustomObject]@{
                         Idx                       = $Count
                         DisplayName               = $mbx.DisplayName
                         UserPrincipalName         = $mbx.UserPrincipalName
@@ -80,25 +81,26 @@ function Invoke-BulkMenu {
                         ArchiveSizeGB             = $ArchiveSizeGB
                         ArchiveQuotaGB            = $ArchiveQuotaGB
                         ArchivePercentUsed        = $ArchivePercentUsed
-                        AutoExpandingArchiveReady = $mbx.AutoExpandingArchiveEnabled
-                        RetentionPolicy           = if ($null -eq $mbx.RetentionPolicy) { "No Policy Assigned" } else { $mbx.RetentionPolicy }
+                        AutoExpandingArchiveReady = [bool]$mbx.AutoExpandingArchiveEnabled
+                        RetentionPolicy           = if ([string]::IsNullOrWhiteSpace($mbx.RetentionPolicy)) { "No Policy Assigned" } else { $mbx.RetentionPolicy }
                         IsSharedMailbox           = $IsShared
                         IsLicensed                = $IsLicensed
                         Selected                  = $false
-                    }
+                    })
                 }
                 
-                Write-Progress -Activity "Compiling Live Mailbox Analytics" -Completed
+                Write-Progress -Activity "Compiling Tenant Mailbox Analytics" -Completed
+                $Global:CentralMailboxCache = $CacheList
             }
             catch {
-                Write-Host "[CRITICAL ERROR] Failed to capture tenant data: $_" -ForegroundColor Red
+                Write-Host "`n[CRITICAL ERROR] Failed to capture tenant data: $($_.Exception.Message)" -ForegroundColor Red
                 $Global:CentralMailboxCache = $null
-                Read-Host "`nPress Enter to return to main menu..."
+                Wait-Console "Press Enter to return to main menu..."
                 return
             }
         }
 
-        # === 2. DIRECT WORKSPACE HANDOFF ===
+        # Hand off to interactive matrix auditor
         $NavigationSignal = Invoke-InteractiveMatrixAuditor
         if ($NavigationSignal -eq "EXIT") {
             $MenuRunning = $false
@@ -118,40 +120,43 @@ function Invoke-InteractiveMatrixAuditor {
         $TotalItems = $Global:CentralMailboxCache.Count
         $SelectedCount = ($Global:CentralMailboxCache | Where-Object { $_.Selected }).Count
 
-        # === GRID HEADER INTERFACE ===
+        # Header Interface
         Write-Host "=========================================================================================================" -ForegroundColor Cyan
-        Write-Host "                                LIVE EXCHANGE ONLINE AUDIT & CONFIGURATION                               " -ForegroundColor Cyan
+        Write-Host "                      BULK MAILBOX AUDIT & CONFIGURATION MATRIX [$Global:TenantName]                     " -ForegroundColor Cyan
         Write-Host "=========================================================================================================" -ForegroundColor Cyan
         
-        # Display Active View Layer configuration settings
-        Write-Host " ACTIVE WORKSPACE VIEW: " -NoNewline; Write-Host "$($Global:ActiveView.ToUpper()) MODE" -ForegroundColor White
+        # Display Active View settings
+        Write-Host " ACTIVE VIEW: " -NoNewline; Write-Host "$($Global:ActiveView.ToUpper()) MODE" -ForegroundColor White -NoNewline
         if ($Global:ActiveView -eq "Storage") {
-            Write-Host " RULES REGISTERS: Primary Limit >= " -NoNewline; Write-Host "$PrimaryThreshold%" -ForegroundColor Yellow -NoNewline
-            Write-Host " | Archive Limit >= " -NoNewline; Write-Host "$ArchiveThreshold%" -ForegroundColor Yellow -NoNewline
-            Write-Host " | Targeted Action: " -NoNewline; Write-Host "$($Global:StorageAction.ToUpper())" -ForegroundColor Cyan
+            Write-Host "  |  Rules: Primary >= " -NoNewline; Write-Host "$PrimaryThreshold%" -ForegroundColor Yellow -NoNewline
+            Write-Host " | Archive >= " -NoNewline; Write-Host "$ArchiveThreshold%" -ForegroundColor Yellow -NoNewline
+            Write-Host " | Target Action: " -NoNewline; Write-Host "$($Global:StorageAction.ToUpper())" -ForegroundColor Cyan
         } else {
-            Write-Host " DELEGATION STEP: Target Action: " -NoNewline; Write-Host "$($Global:DelegateAction.ToUpper())" -ForegroundColor Cyan -NoNewline
-            Write-Host " | Active Rule Target: " -NoNewline; Write-Host "$($Global:SelectedDelegation)" -ForegroundColor Yellow
+            Write-Host "  |  Target Action: " -NoNewline; Write-Host "$($Global:DelegateAction.ToUpper())" -ForegroundColor Cyan -NoNewline
+            Write-Host " | Permission Type: " -NoNewline; Write-Host "$($Global:SelectedDelegation)" -ForegroundColor Yellow
         }
         
-        Write-Host " License Guardrail: " -NoNewline
-        if ($FilterLicensedOnly) { Write-Host "ACTIVE (Skip Unlicensed)" -ForegroundColor Green } else { Write-Host "INACTIVE" -ForegroundColor Yellow }
+        Write-Host " License Filter: " -NoNewline
+        if ($FilterLicensedOnly) { 
+            Write-Host "ACTIVE (Skip Unlicensed / Shared)" -ForegroundColor Green -NoNewline 
+        } else { 
+            Write-Host "INACTIVE (Include All)" -ForegroundColor Yellow -NoNewline 
+        }
         
-        Write-Host "`n DIRECTORY STATUS: Total Objects Loaded: $TotalItems | Currently Armed Selections: $SelectedCount" -ForegroundColor Green
-        Write-Host "========================================================================================================="
+        Write-Host ("  |  Loaded: {0} | Selected: {1}" -f $TotalItems, $SelectedCount) -ForegroundColor Green
+        Write-Host "=========================================================================================================" -ForegroundColor Gray
         
-        # Build dynamic columns depending on active layout focus matrix
+        # Build dynamic columns depending on active layout
         if ($Global:ActiveView -eq "Storage") {
-            $FormatStr = "{0,-4} {1,-6} {2,-22} {3,-8} {4,-5} {5,-22} {6,-24}"
-            Write-Host ($FormatStr -f "ID", "STATE", "DISPLAY NAME", "TYPE", "LIC", "PRIMARY UTILIZATION", "ONLINE ARCHIVE UTIL") -ForegroundColor White
+            $FormatStr = "{0,-4} {1,-6} {2,-24} {3,-8} {4,-5} {5,-24} {6,-22}"
+            Write-Host ($FormatStr -f "ID", "STATE", "DISPLAY NAME", "TYPE", "LIC", "PRIMARY UTILIZATION", "ARCHIVE UTILIZATION") -ForegroundColor White
         } else {
-            # Revised View 2: Added spacing and included Retention Policy for better context during delegation
-            $FormatStr = "{0,-4} {1,-6} {2,-25} {3,-8} {4,-5} {5,-35} {6,-20}"
+            $FormatStr = "{0,-4} {1,-6} {2,-25} {3,-8} {4,-5} {5,-32} {6,-20}"
             Write-Host ($FormatStr -f "ID", "STATE", "DISPLAY NAME", "TYPE", "LIC", "USER PRINCIPAL NAME", "RETENTION POLICY") -ForegroundColor White
         }
-        Write-Host "========================================================================================================="
+        Write-Host "=========================================================================================================" -ForegroundColor Gray
 
-        # === CACHED INTERACTIVE DATA DISPLAY LAYER ===
+        # Data Display Layer
         foreach ($mbx in $Global:CentralMailboxCache) {
             $TypeStr = if ($mbx.IsSharedMailbox) { "Shared" } else { "User" }
             $LicStr = if ($mbx.IsLicensed) { "Yes" } else { "No" }
@@ -167,7 +172,6 @@ function Invoke-InteractiveMatrixAuditor {
                 }
                 $RowString = $FormatStr -f $mbx.Idx, $StateCheckbox, $mbx.DisplayName, $TypeStr, $LicStr, $PrimaryUtilStr, $ArchiveUtilStr
             } else {
-                # Revised View 2 Data Mapping
                 $RowString = $FormatStr -f $mbx.Idx, $StateCheckbox, $mbx.DisplayName, $TypeStr, $LicStr, $mbx.UserPrincipalName, $mbx.RetentionPolicy
             }
 
@@ -184,146 +188,175 @@ function Invoke-InteractiveMatrixAuditor {
             }
         }
 
-        Write-Host "========================================================================================================="
-        Write-Host " INTERACTION METADATA COMMANDS:" -ForegroundColor Cyan
-        Write-Host "  [#] Toggle selection index state         | [T] Change Threshold Values (Primary/Archive)" -ForegroundColor Gray
-        Write-Host "  [V] Run Auto Selection Evaluation Pass   | [E] Export Current Directory to Excel Friendly CSV" -ForegroundColor Yellow
-        Write-Host "  [A] Select All | [D] Clear All Choices   | [L] Toggle License Guardrail Filter" -ForegroundColor Gray
-        Write-Host "  [VIEW1] Switch to Storage Layout         | [VIEW2] Switch to Delegation Rules Matrix Layout" -ForegroundColor White
-        Write-Host "  [R] Force Flush & Re scan Live Cache Metrics" -ForegroundColor DarkGray
-        Write-Host "========================================================================================================="
+        Write-Host "=========================================================================================================" -ForegroundColor Gray
+        Write-Host " COMMANDS & NAVIGATION:" -ForegroundColor Cyan
+        Write-Host "  [#] Toggle index state (e.g. 1 or 1,3,5) | [A] Select All | [D] Clear All" -ForegroundColor Gray
+        Write-Host "  [V1] Switch to Storage View              | [V2] Switch to Delegation View" -ForegroundColor White
+        Write-Host "  [T]  Set Threshold Limits                | [L]  Toggle License Filter" -ForegroundColor Gray
+        Write-Host "  [F]  Auto-Select by Thresholds           | [E]  Export Current Data to CSV" -ForegroundColor Yellow
+        Write-Host "  [R]  Force Refresh & Rescan Metrics      | [0]  Return to Main Menu" -ForegroundColor DarkGray
+        Write-Host "---------------------------------------------------------------------------------------------------------" -ForegroundColor Gray
         
-        # Dynamic execution console command menu parameters based on active context
+        # Contextual action menus
         if ($Global:ActiveView -eq "Storage") {
-            Write-Host " CLOUD PRODUCTION STORAGE PIPELINES (USERS TARGETED):" -ForegroundColor Magenta
-            Write-Host "  [STOR0] Current Target Switch Action Mode Toggle (Current: $Global:StorageAction)" -ForegroundColor White
-            Write-Host "  [STOR1] Bulk Process Core Online Archiving Infrastructure Layers"
-            Write-Host "  [STOR2] Bulk Process Engine Auto Expanding Storage Parameters"
-            Write-Host "  [STOR3] Bulk Process BOTH Online Archive & Auto Expansion Features"
+            Write-Host " STORAGE ACTIONS (Selected Mailboxes):" -ForegroundColor Magenta
+            Write-Host "  [STOR0] Toggle Action Mode (Current: $Global:StorageAction)" -ForegroundColor White
+            Write-Host "  [STOR1] Bulk Apply Online Archiving"
+            Write-Host "  [STOR2] Bulk Apply Auto-Expanding Archive"
+            Write-Host "  [STOR3] Bulk Apply BOTH Online Archive & Auto-Expansion"
         } else {
-            Write-Host " CLOUD PRODUCTION DELEGATION PIPELINES (USERS TARGETED):" -ForegroundColor Magenta
-            Write-Host "  [SEND0] Current Target Operation Action Mode Toggle (Current: $Global:DelegateAction)" -ForegroundColor White
-            Write-Host "  [SEND1] Select SendAs Permission Rule"
-            Write-Host "  [SEND2] Select SendOnBehalf Permission Rule"
-            Write-Host "  [SEND3] Select FullAccess Permission Rule"
-            Write-Host "  [SEND]  EXECUTE BULK PERMISSION DELEGATION PROVISIONING TASK" -ForegroundColor Green
+            Write-Host " DELEGATION ACTIONS (Selected Mailboxes):" -ForegroundColor Magenta
+            Write-Host "  [SEND0] Toggle Delegation Mode (Current: $Global:DelegateAction)" -ForegroundColor White
+            Write-Host "  [SEND1] Select SendAs Permission"
+            Write-Host "  [SEND2] Select SendOnBehalf Permission"
+            Write-Host "  [SEND3] Select FullAccess Permission"
+            Write-Host "  [SEND]  EXECUTE BULK PERMISSION ASSIGNMENT" -ForegroundColor Green
         }
-        Write-Host "  [0]     Return to Main Script Menu"
-        Write-Host "========================================================================================================="
+        Write-Host "=========================================================================================================" -ForegroundColor Gray
 
-        $Action = Read-Host "`n Input Selection"
-        $Action = $Action.ToUpper().Trim()
+        $Action = (Read-Host "`nSelection Command").ToUpper().Trim()
 
-        if ($Action -match '^\d+$' -and $Action -ne "0") {
-            $TargetID = [int]$Action
-            $MatchedMbx = $Global:CentralMailboxCache | Where-Object { $_.Idx -eq $TargetID }
-            if ($null -ne $MatchedMbx) { $MatchedMbx.Selected = -not $MatchedMbx.Selected }
+        # Handle numeric index toggling (e.g. "1" or "1,2,3")
+        if ($Action -match '^[0-9, ]+$' -and $Action -ne "0") {
+            $Indices = $Action -split ',' | ForEach-Object { $_.Trim() }
+            foreach ($idx in $Indices) {
+                if ($idx -match '^\d+$') {
+                    $TargetID = [int]$idx
+                    $MatchedMbx = $Global:CentralMailboxCache | Where-Object { $_.Idx -eq $TargetID }
+                    if ($MatchedMbx) { $MatchedMbx.Selected = -not $MatchedMbx.Selected }
+                }
+            }
             continue
         }
 
         switch ($Action) {
             "0" { return "EXIT" }
             
-            "VIEW1" { $Global:ActiveView = "Storage"; continue }
-            "VIEW2" { $Global:ActiveView = "Delegation"; continue }
+            # View switches
+            { $_ -in @("V1", "VIEW1") } { $Global:ActiveView = "Storage"; continue }
+            { $_ -in @("V2", "VIEW2") } { $Global:ActiveView = "Delegation"; continue }
 
-            "STOR0" {
-                if ($Global:StorageAction -eq "Enable") { $Global:StorageAction = "Disable" }
-                else { $Global:StorageAction = "Enable" }
+            # Storage Mode Toggle
+            { $_ -in @("STOR0", "MODE") -and $Global:ActiveView -eq "Storage" } {
+                $Global:StorageAction = if ($Global:StorageAction -eq "Enable") { "Disable" } else { "Enable" }
                 continue
             }
 
-            "SEND0" {
-                if ($Global:DelegateAction -eq "Add") { $Global:DelegateAction = "Remove" }
-                else { $Global:DelegateAction = "Add" }
+            # Delegation Mode Toggle
+            { $_ -in @("SEND0", "MODE") -and $Global:ActiveView -eq "Delegation" } {
+                $Global:DelegateAction = if ($Global:DelegateAction -eq "Add") { "Remove" } else { "Add" }
                 continue
             }
 
+            # Delegation Permission selection
             "SEND1" { $Global:SelectedDelegation = "SendAs"; continue }
             "SEND2" { $Global:SelectedDelegation = "SendOnBehalf"; continue }
             "SEND3" { $Global:SelectedDelegation = "FullAccess"; continue }
 
-            "SEND" {
-                $Targets = $Global:CentralMailboxCache | Where-Object { $_.Selected }
-                if ($Targets.Count -eq 0) { Write-Host "`n[FAIL] No mailboxes selected." -ForegroundColor Red; Start-Sleep -Seconds 1; continue }
-                if ($Global:SelectedDelegation -eq "None") { Write-Host "`n[FAIL] No delegation type selected. Press SEND1, SEND2, or SEND3." -ForegroundColor Red; Start-Sleep -Seconds 1; continue }
-                
-                $DelegateUser = Read-Host "Enter the UPN of the user receiving or losing the permissions"
-                $DelegateUser = $DelegateUser.Trim()
+            # Execute Delegation
+            { $_ -in @("SEND", "APPLY") } {
+                $Targets = @($Global:CentralMailboxCache | Where-Object { $_.Selected })
+                if ($Targets.Count -eq 0) { 
+                    Write-Host "`n[ERROR] No mailboxes selected. Select mailboxes first." -ForegroundColor Red
+                    Start-Sleep -Seconds 1
+                    continue 
+                }
+                if ($Global:SelectedDelegation -eq "None") { 
+                    Write-Host "`n[ERROR] No permission type selected. Please choose SEND1 (SendAs), SEND2 (SendOnBehalf), or SEND3 (FullAccess)." -ForegroundColor Red
+                    Start-Sleep -Seconds 1.5
+                    continue 
+                }
+
+                $DelegateUser = (Read-Host "Enter the UPN of the delegate receiving/losing access").Trim()
                 if ([string]::IsNullOrWhiteSpace($DelegateUser)) { continue }
 
                 Clear-Host
-                Write-Host "=== PIPELINE DELEGATION: MASS $Global:DelegateAction $Global:SelectedDelegation ===" -ForegroundColor Magenta
-                foreach ($t in $Targets) { Write-Host $t.UserPrincipalName -ForegroundColor Cyan }
+                Write-Host "=====================================================================" -ForegroundColor Magenta
+                Write-Host " BULK DELEGATION: $Global:DelegateAction $Global:SelectedDelegation" -ForegroundColor Magenta
+                Write-Host " Delegate User:   $DelegateUser" -ForegroundColor White
+                Write-Host " Target Count:    $($Targets.Count) mailboxes" -ForegroundColor Yellow
+                Write-Host "=====================================================================" -ForegroundColor Magenta
                 
-                $Confirm = Read-Host "`nCommit live permission updates to Microsoft 365? (Y/YES/NO)"
-                if ($Confirm.ToUpper().Trim() -match '^(Y|YES)$') {
+                $Confirm = Read-Host "`nCommit permission changes to Microsoft 365? (Y/N)"
+                if ($Confirm.Trim() -imatch '^Y') {
                     foreach ($t in $Targets) {
                         try {
-                            Write-Host "Processing payload configuration on: $($t.UserPrincipalName)..." -ForegroundColor Gray
+                            Write-Host "Processing $($t.UserPrincipalName)..." -NoNewline -ForegroundColor Gray
                             if ($Global:SelectedDelegation -eq "FullAccess") {
                                 if ($Global:DelegateAction -eq "Add") {
-                                    Add-MailboxPermission -Identity $t.UserPrincipalName -User $DelegateUser -AccessRights FullAccess -InheritanceType All -Confirm:$false -ErrorAction Stop
+                                    $null = Add-MailboxPermission -Identity $t.UserPrincipalName -User $DelegateUser -AccessRights FullAccess -InheritanceType All -Confirm:$false -ErrorAction Stop
                                 } else {
-                                    Remove-MailboxPermission -Identity $t.UserPrincipalName -User $DelegateUser -AccessRights FullAccess -Confirm:$false -ErrorAction Stop
+                                    $null = Remove-MailboxPermission -Identity $t.UserPrincipalName -User $DelegateUser -AccessRights FullAccess -Confirm:$false -ErrorAction Stop
                                 }
                             }
                             elseif ($Global:SelectedDelegation -eq "SendAs") {
                                 if ($Global:DelegateAction -eq "Add") {
-                                    Add-RecipientPermission -Identity $t.UserPrincipalName -Trustee $DelegateUser -AccessRights SendAs -Confirm:$false -ErrorAction Stop
+                                    $null = Add-RecipientPermission -Identity $t.UserPrincipalName -Trustee $DelegateUser -AccessRights SendAs -Confirm:$false -ErrorAction Stop
                                 } else {
-                                    Remove-RecipientPermission -Identity $t.UserPrincipalName -Trustee $DelegateUser -AccessRights SendAs -Confirm:$false -ErrorAction Stop
+                                    $null = Remove-RecipientPermission -Identity $t.UserPrincipalName -Trustee $DelegateUser -AccessRights SendAs -Confirm:$false -ErrorAction Stop
                                 }
                             }
                             elseif ($Global:SelectedDelegation -eq "SendOnBehalf") {
                                 if ($Global:DelegateAction -eq "Add") {
-                                    Set-Mailbox -Identity $t.UserPrincipalName -GrantSendOnBehalfTo @{Add=$DelegateUser} -ErrorAction Stop
+                                    $null = Set-Mailbox -Identity $t.UserPrincipalName -GrantSendOnBehalfTo @{Add=$DelegateUser} -ErrorAction Stop
                                 } else {
-                                    Set-Mailbox -Identity $t.UserPrincipalName -GrantSendOnBehalfTo @{Remove=$DelegateUser} -ErrorAction Stop
+                                    $null = Set-Mailbox -Identity $t.UserPrincipalName -GrantSendOnBehalfTo @{Remove=$DelegateUser} -ErrorAction Stop
                                 }
                             }
                             $t.Selected = $false
-                            Write-Host "[OK] Complete." -ForegroundColor Green
+                            Write-Host " [OK]" -ForegroundColor Green
                         }
                         catch {
-                            Write-Host "[ERROR] Cloud execution failed for $($t.UserPrincipalName): $_" -ForegroundColor Red
+                            Write-Host " [FAILED: $($_.Exception.Message)]" -ForegroundColor Red
                         }
                     }
-                    Read-Host "`nOperational workflow complete. Press Enter to return..."
+                    Wait-Console "Bulk delegation complete. Press Enter to continue..."
                 }
                 continue
             }
 
+            # Cache Refresh
             "R" {
                 $Global:CentralMailboxCache = $null
-                Write-Host "`nFlushing local cache..." -ForegroundColor Yellow
+                Write-Host "`nFlushing local cache and rescanning..." -ForegroundColor Yellow
                 Start-Sleep -Seconds 1
                 return "REFRESH" 
             }
 
+            # Threshold Configuration
             "T" {
                 Clear-Host
-                Write-Host "=== THRESHOLD MANAGEMENT SUB CONSTRAINTS ===" -ForegroundColor Cyan
-                Write-Host "[1] Modify Primary Mailbox Threshold (Current: $PrimaryThreshold%)" -ForegroundColor Gray
-                Write-Host "[2] Modify Online Archive Threshold (Current: $ArchiveThreshold%)" -ForegroundColor Gray
-                Write-Host "[0] Back to Main Workspace" -ForegroundColor Yellow
+                Write-Host "=====================================================================" -ForegroundColor Cyan
+                Write-Host "                     STORAGE THRESHOLD SETTINGS                      " -ForegroundColor Cyan
+                Write-Host "=====================================================================" -ForegroundColor Cyan
+                Write-Host " 1. Modify Primary Mailbox Threshold (Current: $PrimaryThreshold%)"
+                Write-Host " 2. Modify Online Archive Threshold  (Current: $ArchiveThreshold%)"
+                Write-Host " 0. Return to Matrix"
+                Write-Host "---------------------------------------------------------------------"
                 
-                $TChoice = Read-Host "`nSelect parameter adjustment"
-                $TChoice = $TChoice.Trim()
-                
+                $TChoice = (Read-Host "Selection").Trim()
                 if ($TChoice -eq "1") {
-                    $NewT = Read-Host "Enter new Primary usage percentage threshold (1-99)"
-                    if ($NewT -match '^\d+$' -and [int]$NewT -gt 0 -and [int]$NewT -lt 100) { $PrimaryThreshold = [int]$NewT }
+                    $NewT = (Read-Host "Enter new Primary percentage threshold (1-99)").Trim()
+                    if ($NewT -match '^\d+$' -and [int]$NewT -ge 1 -and [int]$NewT -le 99) { 
+                        $PrimaryThreshold = [int]$NewT 
+                    }
                 }
                 elseif ($TChoice -eq "2") {
-                    $NewT = Read-Host "Enter new Archive usage percentage threshold (1-99)"
-                    if ($NewT -match '^\d+$' -and [int]$NewT -gt 0 -and [int]$NewT -lt 100) { $ArchiveThreshold = [int]$NewT }
+                    $NewT = (Read-Host "Enter new Archive percentage threshold (1-99)").Trim()
+                    if ($NewT -match '^\d+$' -and [int]$NewT -ge 1 -and [int]$NewT -le 99) { 
+                        $ArchiveThreshold = [int]$NewT 
+                    }
                 }
             }
 
-            "L" { $FilterLicensedOnly = -not $FilterLicensedOnly }
+            # License Filter Toggle
+            "L" { 
+                $FilterLicensedOnly = -not $FilterLicensedOnly 
+                continue
+            }
 
-            "V" {
+            # Auto-Select matching thresholds
+            { $_ -in @("V", "F") } {
                 foreach ($mbx in $Global:CentralMailboxCache) {
                     $QualifiesPrimary = (-not $mbx.ArchiveEnabled -and $mbx.PrimaryPercentUsed -ge $PrimaryThreshold)
                     $QualifiesArchive = ($mbx.ArchiveEnabled -and -not $mbx.AutoExpandingArchiveReady -and $mbx.ArchivePercentUsed -ge $ArchiveThreshold)
@@ -331,180 +364,141 @@ function Invoke-InteractiveMatrixAuditor {
                     
                     $mbx.Selected = ($QualifiesPrimary -or $QualifiesArchive) -and $PassesLicense
                 }
-                Write-Host "`nAutomation rules processed across session data maps!" -ForegroundColor Green
+                Write-Host "`nAuto-selection rules evaluated across mailboxes!" -ForegroundColor Green
                 Start-Sleep -Seconds 1
             }
 
-            "A" { foreach ($mbx in $Global:CentralMailboxCache) { $mbx.Selected = $true } }
-            "D" { foreach ($mbx in $Global:CentralMailboxCache) { $mbx.Selected = $false } }
+            # Select All / Clear All
+            "A" { foreach ($mbx in $Global:CentralMailboxCache) { $mbx.Selected = $true }; continue }
+            "D" { foreach ($mbx in $Global:CentralMailboxCache) { $mbx.Selected = $false }; continue }
 
+            # Export to CSV
             "E" {
-                Clear-Host
-                Write-Host "=== PIPELINE ENGINE: DATA EXTRACTION TO CSV ===" -ForegroundColor Cyan
-                Write-Host "Generating structural directory preview stream below:`n" -ForegroundColor Gray
-                
-                $ExportData = foreach ($m in $Global:CentralMailboxCache) {
-                    [PSCustomObject]@{
-                        "name"                     = $m.DisplayName
-                        "email"                    = $m.UserPrincipalName
-                        "primary size (in MB)"     = [math]::Round($m.PrimarySizeGB * 1024, 2)
-                        "primary limit (MB)"       = [math]::Round($m.PrimaryQuotaGB * 1024, 2)
-                        "primary percent"          = "$($m.PrimaryPercentUsed)%"
-                        "archive (in MB)"          = [math]::Round($m.ArchiveSizeGB * 1024, 2)
-                        "archive limit (MB)"       = [math]::Round($m.ArchiveQuotaGB * 1024, 2)
-                        "archive percent"          = "$($m.ArchivePercentUsed)%"
-                        "shared mailbox"           = if ($m.IsSharedMailbox) { "True" } else { "False" }
-                        "current retention policy" = $m.RetentionPolicy
-                        "if auto expansion is on"  = if ($m.AutoExpandingArchiveReady) { "True" } else { "False" }
-                    }
-                }
-
-                $ExportData | Format-Table | Out-String | Write-Host -ForegroundColor Gray
-                Write-Host "========================================================================================================="
-                
-                Write-Host "Enter path selection options (or press [0] to abort and go back):" -ForegroundColor Yellow
-                $TargetDir = Read-Host "Output Directory Path (e.g., C:\Temp or leave empty for local folder)"
-                $TargetDir = $TargetDir.Trim()
-                
-                if ($TargetDir -eq "0") {
-                    Write-Host "`nExport process discarded." -ForegroundColor Yellow
-                    Start-Sleep -Seconds 1
-                    continue
-                }
-                
-                if ([string]::IsNullOrWhiteSpace($TargetDir)) { $TargetDir = "." }
-                if (-not (Test-Path -Path $TargetDir)) {
-                    try { New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null }
-                    catch { Write-Host "[WARN] Folder creation faulted. Using root base execution scope." -ForegroundColor Yellow; $TargetDir = "." }
-                }
-
-                $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-                $OutputFile = Join-Path $TargetDir "LiveMailboxAudit_$Timestamp.csv"
-
-                try {
-                    $ExportData | Export-Csv -Path $OutputFile -NoTypeInformation -Encoding UTF8
-                    Write-Host "`n[SUCCESS] Document completely structured and outputted:" -ForegroundColor Green
-                    Write-Host " -> $OutputFile" -ForegroundColor Cyan
-                }
-                catch {
-                    Write-Host "`n[ERROR] System writing stream exception: $_" -ForegroundColor Red
-                }
-                Read-Host "`nPress Enter to return to tracking board..."
+                Export-MailboxAuditReport -MailboxData $Global:CentralMailboxCache
+                continue
             }
 
+            # Bulk Provision Online Archive
             "STOR1" {
-                $Targets = $Global:CentralMailboxCache | Where-Object { $_.Selected }
-                if ($Targets.Count -eq 0) { Write-Host "`n[FAIL] Selection pipeline completely empty." -ForegroundColor Red; Start-Sleep -Seconds 1; continue }
+                $Targets = @($Global:CentralMailboxCache | Where-Object { $_.Selected })
+                if ($Targets.Count -eq 0) { 
+                    Write-Host "`n[ERROR] No mailboxes selected." -ForegroundColor Red
+                    Start-Sleep -Seconds 1
+                    continue 
+                }
                 Clear-Host
-                Write-Host "=== PIPELINE STOR1: MASS PROVISION ONLINE ARCHIVING ===" -ForegroundColor Magenta
+                Write-Host "=====================================================================" -ForegroundColor Magenta
+                Write-Host " BULK ACTION: $($Global:StorageAction.ToUpper()) ONLINE ARCHIVE" -ForegroundColor Magenta
+                Write-Host " Total Targets: $($Targets.Count) mailboxes" -ForegroundColor White
+                Write-Host "=====================================================================" -ForegroundColor Magenta
+                foreach ($t in $Targets) { Write-Host " - $($t.UserPrincipalName)" -ForegroundColor Cyan }
                 
-                Write-Host "Target Mailbox Emails (Copy Paste Ready):" -ForegroundColor Yellow
-                Write-Host "========================================"
-                foreach ($t in $Targets) { Write-Host $t.UserPrincipalName -ForegroundColor Cyan }
-                Write-Host "========================================"
-                
-                $Confirm = Read-Host "`nCommit updates to Microsoft 365? (YES/NO)"
-                if ($Confirm.ToUpper().Trim() -match '^(Y|YES)$') {
+                $Confirm = Read-Host "`nCommit updates to Microsoft 365? (Y/N)"
+                if ($Confirm.Trim() -imatch '^Y') {
                     foreach ($t in $Targets) {
                         try {
-                            Write-Host "Executing cloud provisioning payload on: $($t.UserPrincipalName)..." -ForegroundColor Gray
+                            Write-Host "Processing $($t.UserPrincipalName)..." -NoNewline -ForegroundColor Gray
                             if ($Global:StorageAction -eq "Enable") {
-                                Enable-Mailbox -Identity $t.UserPrincipalName -Archive -ErrorAction Stop
+                                $null = Enable-Mailbox -Identity $t.UserPrincipalName -Archive -ErrorAction Stop
                                 $t.ArchiveEnabled = $true
                             } else {
-                                Disable-Mailbox -Identity $t.UserPrincipalName -Archive -Confirm:$false -ErrorAction Stop
+                                $null = Disable-Mailbox -Identity $t.UserPrincipalName -Archive -Confirm:$false -ErrorAction Stop
                                 $t.ArchiveEnabled = $false
                             }
                             $t.Selected = $false
-                            Write-Host "[OK] Provisioned." -ForegroundColor Green
+                            Write-Host " [OK]" -ForegroundColor Green
                         }
                         catch {
-                            Write-Host "[ERROR] Cloud execution failed for $($t.UserPrincipalName): $_" -ForegroundColor Red
+                            Write-Host " [FAILED: $($_.Exception.Message)]" -ForegroundColor Red
                         }
                     }
-                    Write-Host "`nOperational workflow complete." -ForegroundColor Green
+                    Wait-Console "Bulk archive operation complete. Press Enter to return..."
                 }
-                else { Write-Host "`nExecution batch terminated safely." -ForegroundColor Yellow }
-                Read-Host "`nPress Enter to return..."
             }
 
+            # Bulk Provision Auto-Expanding Archive
             "STOR2" {
-                $Targets = $Global:CentralMailboxCache | Where-Object { $_.Selected }
-                if ($Targets.Count -eq 0) { Write-Host "`n[FAIL] Selection pipeline completely empty." -ForegroundColor Red; Start-Sleep -Seconds 1; continue }
+                $Targets = @($Global:CentralMailboxCache | Where-Object { $_.Selected })
+                if ($Targets.Count -eq 0) { 
+                    Write-Host "`n[ERROR] No mailboxes selected." -ForegroundColor Red
+                    Start-Sleep -Seconds 1
+                    continue 
+                }
                 Clear-Host
-                Write-Host "=== PIPELINE STOR2: MASS PROVISION AUTO EXPANSION HOOKS ===" -ForegroundColor Magenta
+                Write-Host "=====================================================================" -ForegroundColor Magenta
+                Write-Host " BULK ACTION: ENABLE AUTO-EXPANDING ARCHIVE" -ForegroundColor Magenta
+                Write-Host " Total Targets: $($Targets.Count) mailboxes" -ForegroundColor White
+                Write-Host "=====================================================================" -ForegroundColor Magenta
+                foreach ($t in $Targets) { Write-Host " - $($t.UserPrincipalName)" -ForegroundColor Cyan }
                 
-                Write-Host "Target Mailbox Emails (Copy Paste Ready):" -ForegroundColor Yellow
-                Write-Host "========================================"
-                foreach ($t in $Targets) { Write-Host $t.UserPrincipalName -ForegroundColor Cyan }
-                Write-Host "========================================"
-                
-                $Confirm = Read-Host "`nCommit updates to Microsoft 365? (YES/NO)"
-                if ($Confirm.ToUpper().Trim() -match '^(Y|YES)$') {
+                if ($Global:StorageAction -ne "Enable") {
+                    Write-Host "`n[NOTICE] Auto-Expanding Archives cannot be disabled once enabled per Microsoft architecture." -ForegroundColor Yellow
+                    Wait-Console
+                    continue
+                }
+
+                $Confirm = Read-Host "`nCommit updates to Microsoft 365? (Y/N)"
+                if ($Confirm.Trim() -imatch '^Y') {
                     foreach ($t in $Targets) {
                         try {
-                            Write-Host "Executing cloud provisioning payload on: $($t.UserPrincipalName)..." -ForegroundColor Gray
-                            if ($Global:StorageAction -eq "Enable") {
-                                Enable-Mailbox -Identity $t.UserPrincipalName -AutoExpandingArchive -ErrorAction Stop
-                                $t.AutoExpandingArchiveReady = $true
-                            } else {
-                                Write-Host "[WARN] Disabling Auto Expanding storage parameters requires Microsoft Service Request escalations." -ForegroundColor Yellow
-                            }
+                            Write-Host "Processing $($t.UserPrincipalName)..." -NoNewline -ForegroundColor Gray
+                            $null = Enable-Mailbox -Identity $t.UserPrincipalName -AutoExpandingArchive -ErrorAction Stop
+                            $t.AutoExpandingArchiveReady = $true
                             $t.Selected = $false
-                            Write-Host "[OK] Provisioned." -ForegroundColor Green
+                            Write-Host " [OK]" -ForegroundColor Green
                         }
                         catch {
-                            Write-Host "[ERROR] Cloud execution failed for $($t.UserPrincipalName): $_" -ForegroundColor Red
+                            Write-Host " [FAILED: $($_.Exception.Message)]" -ForegroundColor Red
                         }
                     }
-                    Write-Host "`nOperational workflow complete." -ForegroundColor Green
+                    Wait-Console "Bulk auto-expansion operation complete. Press Enter to return..."
                 }
-                else { Write-Host "`nExecution batch terminated safely." -ForegroundColor Yellow }
-                Read-Host "`nPress Enter to return..."
             }
 
+            # Bulk Provision Both (Archive + Auto-Expansion)
             "STOR3" {
-                $Targets = $Global:CentralMailboxCache | Where-Object { $_.Selected }
-                if ($Targets.Count -eq 0) { Write-Host "`n[FAIL] Selection pipeline completely empty." -ForegroundColor Red; Start-Sleep -Seconds 1; continue }
+                $Targets = @($Global:CentralMailboxCache | Where-Object { $_.Selected })
+                if ($Targets.Count -eq 0) { 
+                    Write-Host "`n[ERROR] No mailboxes selected." -ForegroundColor Red
+                    Start-Sleep -Seconds 1
+                    continue 
+                }
                 Clear-Host
-                Write-Host "=== PIPELINE STOR3: MASS DUAL ARCHIVE & EXPANSION OPTIMIZATION ===" -ForegroundColor Yellow
+                Write-Host "=====================================================================" -ForegroundColor Yellow
+                Write-Host " BULK ACTION: DUAL ARCHIVE & AUTO-EXPANSION" -ForegroundColor Yellow
+                Write-Host " Total Targets: $($Targets.Count) mailboxes" -ForegroundColor White
+                Write-Host "=====================================================================" -ForegroundColor Yellow
+                foreach ($t in $Targets) { Write-Host " - $($t.UserPrincipalName)" -ForegroundColor Cyan }
                 
-                Write-Host "Target Mailbox Emails (Copy Paste Ready):" -ForegroundColor Yellow
-                Write-Host "========================================"
-                foreach ($t in $Targets) { Write-Host $t.UserPrincipalName -ForegroundColor Cyan }
-                Write-Host "========================================"
-                
-                $Confirm = Read-Host "`nCommit updates to Microsoft 365? (Y/YES/NO)"
-                if ($Confirm.ToUpper().Trim() -match '^(Y|YES)$') {
+                $Confirm = Read-Host "`nCommit updates to Microsoft 365? (Y/N)"
+                if ($Confirm.Trim() -imatch '^Y') {
                     foreach ($t in $Targets) {
                         try {
-                            Write-Host "Executing dual cloud payload on: $($t.UserPrincipalName)..." -ForegroundColor Gray
+                            Write-Host "Processing $($t.UserPrincipalName)..." -NoNewline -ForegroundColor Gray
                             if ($Global:StorageAction -eq "Enable") {
                                 if (-not $t.ArchiveEnabled) {
-                                    Enable-Mailbox -Identity $t.UserPrincipalName -Archive -ErrorAction Stop
+                                    $null = Enable-Mailbox -Identity $t.UserPrincipalName -Archive -ErrorAction Stop
                                     $t.ArchiveEnabled = $true
                                 }
-                                Enable-Mailbox -Identity $t.UserPrincipalName -AutoExpandingArchive -ErrorAction Stop
+                                $null = Enable-Mailbox -Identity $t.UserPrincipalName -AutoExpandingArchive -ErrorAction Stop
                                 $t.AutoExpandingArchiveReady = $true
                             } else {
-                                Disable-Mailbox -Identity $t.UserPrincipalName -Archive -Confirm:$false -ErrorAction Stop
+                                $null = Disable-Mailbox -Identity $t.UserPrincipalName -Archive -Confirm:$false -ErrorAction Stop
                                 $t.ArchiveEnabled = $false
                             }
                             $t.Selected = $false
-                            Write-Host "[OK] Complete Optimization Action Processed." -ForegroundColor Green
+                            Write-Host " [OK]" -ForegroundColor Green
                         }
                         catch {
-                            Write-Host "[ERROR] Cloud execution failed for $($t.UserPrincipalName): $_" -ForegroundColor Red
+                            Write-Host " [FAILED: $($_.Exception.Message)]" -ForegroundColor Red
                         }
                     }
-                    Write-Host "`nOperational workflow complete." -ForegroundColor Green
+                    Wait-Console "Bulk dual operation complete. Press Enter to return..."
                 }
-                else { Write-Host "`nExecution batch terminated safely." -ForegroundColor Yellow }
-                Read-Host "`nPress Enter to return..."
             }
 
             Default {
-                Write-Host "Invalid menu command parameters." -ForegroundColor Red
+                Write-Host "Invalid command selection." -ForegroundColor Red
                 Start-Sleep -Milliseconds 600
             }
         }

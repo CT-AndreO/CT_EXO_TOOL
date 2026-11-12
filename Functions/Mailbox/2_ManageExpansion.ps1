@@ -7,53 +7,85 @@ function Invoke-ManageExpansion {
 
         try {
             $Mbx = Get-Mailbox -Identity $Identity -ErrorAction Stop
-            $AutoExpandEnabled = $Mbx.AutoExpandingArchiveEnabled
+            $AutoExpandEnabled = [bool]$Mbx.AutoExpandingArchiveEnabled
+            $ArchiveEnabled = ($Mbx.ArchiveStatus -match "Active|Enabled")
         }
         catch {
-            Write-Host "Failed evaluating feature directory structure properties: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "Failed to retrieve mailbox properties: $($_.Exception.Message)" -ForegroundColor Red
             Wait-Console
             return
         }
 
-        Write-Host " [ AUTO EXPANSION ARCHITECTURE CONTROL LAYER: $Identity ] " -BackgroundColor DarkCyan -ForegroundColor White
-        Write-Host "------------------------------------------------------------"
-        Write-Host " 1. Auto Expansion Status: " -NoNewline
+        Write-Host "=====================================================================" -ForegroundColor Cyan
+        Write-Host "               AUTO-EXPANDING ARCHIVE MANAGEMENT                     " -ForegroundColor Cyan
+        Write-Host "=====================================================================" -ForegroundColor Cyan
+        Write-Host " Mailbox: $Identity" -ForegroundColor White
+        Write-Host "---------------------------------------------------------------------"
+        Write-Host " Online Archive Status:        " -NoNewline
+        Write-ToggleStatus -State $ArchiveEnabled
+        Write-Host " Auto-Expanding Archive Status:" -NoNewline
         Write-ToggleStatus -State $AutoExpandEnabled
-        Write-Host "------------------------------------------------------------"
-        Write-Host " 0. Back"
-        Write-Host "------------------------------------------------------------"
+        Write-Host "---------------------------------------------------------------------"
 
-        $Choice = Read-Host "Selection"
+        if (-not $ArchiveEnabled) {
+            Write-Host "[NOTICE] The online archive must be enabled before auto-expansion can be used." -ForegroundColor Yellow
+            Write-Host "Please enable Online Archiving first in the 'Archiving & Retention' menu.`n" -ForegroundColor Gray
+        }
+
+        if ($AutoExpandEnabled) {
+            Write-Host "[INFO] Auto-Expanding Archive is ACTIVE for this mailbox." -ForegroundColor Green
+            Write-Host "Microsoft 365 will automatically provision auxiliary archive storage" -ForegroundColor Gray
+            Write-Host "as usage approaches capacity limits (up to 1.5 TB total)." -ForegroundColor Gray
+            Write-Host "`nNote: Microsoft Exchange Online architecture does not support disabling" -ForegroundColor DarkGray
+            Write-Host "auto-expanding archives once provisioned." -ForegroundColor DarkGray
+            Write-Host "---------------------------------------------------------------------"
+            Write-Host " 0. Back to User Hub"
+        }
+        else {
+            Write-Host " 1. Enable Auto-Expanding Archive"
+            Write-Host " 0. Back to User Hub"
+        }
+        Write-Host "---------------------------------------------------------------------"
+
+        $Choice = (Read-Host "Selection").Trim()
 
         switch ($Choice) {
             "1" {
                 if ($AutoExpandEnabled) {
-                    Write-Host "`nWarning: Microsoft multi-tier storage layers structurally prohibit turning off expansion mechanisms once provisioned." -ForegroundColor Yellow
-                    $Confirm = Read-Host "Attempt force cancellation override protocol sequences? (Y/N)"
-                    if ($Confirm -imatch 'Y') {
-                        try {
-                            Disable-Mailbox -Identity $Identity -AutoExpandingArchive -ErrorAction Stop
-                            Write-Host "Command accepted by remote endpoint parser." -ForegroundColor Green
-                        }
-                        catch {
-                            Write-Host "Operation natively blocked by cloud target framework: $($_.Exception.Message)" -ForegroundColor Red
-                        }
-                        Wait-Console
-                    }
+                    Write-Host "`nAuto-expanding archive is already enabled for this mailbox." -ForegroundColor Yellow
+                    Start-Sleep -Seconds 1
+                    continue
                 }
-                else {
-                    Write-Host "`nInitializing Auto Expansion..." -ForegroundColor Gray
+
+                if (-not $ArchiveEnabled) {
+                    Write-Host "`nCannot enable auto-expansion: Online Archive is not active." -ForegroundColor Red
+                    Wait-Console
+                    continue
+                }
+
+                Write-Host "`nIMPORTANT: Once enabled, Microsoft 365 does NOT permit disabling" -ForegroundColor Yellow
+                Write-Host "auto-expanding archives on a mailbox." -ForegroundColor Yellow
+                $Confirm = Read-Host "Are you sure you want to enable Auto-Expanding Archive for $Identity? (Y/N)"
+                
+                if ($Confirm.Trim() -imatch '^Y') {
+                    Write-Host "Enabling Auto-Expanding Archive on Exchange Online..." -ForegroundColor Gray
                     try {
                         Enable-Mailbox -Identity $Identity -AutoExpandingArchive -ErrorAction Stop
-                        Write-Host "Auto Expansion provisioned successfully!" -ForegroundColor Green
+                        Write-Host "Auto-Expanding Archive enabled successfully!" -ForegroundColor Green
                     }
                     catch {
-                        Write-Host "Deployment initialization validation failure: $($_.Exception.Message)" -ForegroundColor Red
+                        Write-Host "Failed to enable auto-expansion: $($_.Exception.Message)" -ForegroundColor Red
                     }
                     Wait-Console
                 }
             }
-            "0" { $AutoExpandMenuRunning = $false }
+            "0" { 
+                $AutoExpandMenuRunning = $false 
+            }
+            Default {
+                Write-Host "Invalid selection." -ForegroundColor Red
+                Start-Sleep -Seconds 1
+            }
         }
     }
 }
