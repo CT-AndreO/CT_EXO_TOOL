@@ -1,58 +1,56 @@
 function Invoke-UserMenu {
-    # Guard clause: Ensure we actually have a user before rendering the menu
     if ($null -eq $Global:TargetUser) {
         Write-Host "Error: No target user selected." -ForegroundColor Red
         Start-Sleep -Seconds 1
         return
     }
 
-    # 1. Parse and format the creation timestamp
-    if ($null -ne $Global:TargetUser.WhenCreated) {
-        $CreatedDate = $Global:TargetUser.WhenCreated.ToString("yyyy/MM/dd HH:mm:ss")
-    }
-    else {
-        $CreatedDate = "Unknown"
+    # 1. Format creation date
+    $CreatedDate = if ($Global:TargetUser.WhenCreated) { 
+        $Global:TargetUser.WhenCreated.ToString("yyyy-MM-dd HH:mm:ss") 
+    } else { 
+        "Unknown" 
     }
 
-    # 2. Parse and format the Mailbox Type (RecipientTypeDetails)
-    if ($null -ne $Global:TargetUser.RecipientTypeDetails) {
-        # Translate raw Exchange values into clean human-readable text
-        switch ($Global:TargetUser.RecipientTypeDetails.ToString()) {
-            "UserMailbox" { $MailboxType = "Regular User" }
-            "SharedMailbox" { $MailboxType = "Shared Mailbox" }
-            "RoomMailbox" { $MailboxType = "Room / Resource" }
-            "EquipmentMailbox" { $MailboxType = "Equipment / Resource" }
-            Default { $MailboxType = $Global:TargetUser.RecipientTypeDetails.ToString() }
-        }
-    }
-    else {
-        $MailboxType = "Unknown"
+    # 2. Format Mailbox Type
+    $MailboxType = switch ($Global:TargetUser.RecipientTypeDetails.ToString()) {
+        "UserMailbox"      { "Regular User Mailbox" }
+        "SharedMailbox"    { "Shared Mailbox" }
+        "RoomMailbox"      { "Room Mailbox" }
+        "EquipmentMailbox" { "Equipment Mailbox" }
+        Default            { $Global:TargetUser.RecipientTypeDetails.ToString() }
     }
 
     $UserRunning = $true
     while ($UserRunning) {
         Clear-Host
-        Write-Host "=== MANAGING USER: $($Global:TargetUser.DisplayName) ===" -ForegroundColor Cyan
-        Write-Host "User Principal Name:   $($Global:TargetUser.UserPrincipalName)" -ForegroundColor Gray
-        Write-Host "Mailbox Creation Date: $CreatedDate (GMT+2)" -ForegroundColor Gray
-        Write-Host "Mailbox Type:          $MailboxType" -ForegroundColor Gray
-        Write-Host "--------------------------------------------------"
-        Write-Host "1. Manage Archival Rules"
-        Write-Host "2. Manage Auto Expansion"
-        Write-Host "3. Monitor Mailbox Storage (Live Analytics)"
-        Write-Host "4. Manage Calendar Sharing"
-        Write-Host "0. Back to User Search"
+        Write-Host "=====================================================================" -ForegroundColor Cyan
+        Write-Host "                     MAILBOX MANAGEMENT HUB                          " -ForegroundColor Cyan
+        Write-Host "=====================================================================" -ForegroundColor Cyan
+        Write-Host " User:             $($Global:TargetUser.DisplayName)" -ForegroundColor White
+        Write-Host " UPN / Email:      $($Global:TargetUser.UserPrincipalName)" -ForegroundColor Gray
+        Write-Host " Mailbox Type:     $MailboxType" -ForegroundColor Gray
+        Write-Host " Created Date:     $CreatedDate" -ForegroundColor Gray
+        Write-Host "---------------------------------------------------------------------"
+        Write-Host " 1. Archiving & Retention Policies (Archive Status, MRM, MFA)"
+        Write-Host " 2. Auto-Expanding Archive Management"
+        Write-Host " 3. Mailbox Storage & Analytics (Live Monitor)"
+        Write-Host " 4. Calendar Sharing & Permissions Delegation"
+        Write-Host " 5. View Folder Statistics & Item Counts"
+        Write-Host " 0. Return to User Search"
+        Write-Host "---------------------------------------------------------------------"
 
-        $Choice = Read-Host "`nSelection"
+        $Choice = (Read-Host "Selection").Trim()
 
         switch ($Choice) {
             "1" { Invoke-ManageArchive }
             "2" { Invoke-ManageExpansion }
             "3" { Invoke-StorageMonitor }
             "4" { Invoke-CalendarSharing }
+            "5" { Invoke-FolderStatistics }
             "0" { $UserRunning = $false }
             Default { 
-                Write-Host "Invalid Selection." -ForegroundColor Red
+                Write-Host "Invalid selection. Please enter 0 to 5." -ForegroundColor Red
                 Start-Sleep -Seconds 1 
             }
         }

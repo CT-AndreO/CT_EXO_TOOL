@@ -1,25 +1,45 @@
 function Invoke-SignIn {
     Clear-Host
-    Write-Host "=== EXCHANGE ONLINE AUTHENTICATION ===" -ForegroundColor Cyan
+    Write-Host "=====================================================================" -ForegroundColor Cyan
+    Write-Host "                 EXCHANGE ONLINE AUTHENTICATION                     " -ForegroundColor Cyan
+    Write-Host "=====================================================================" -ForegroundColor Cyan
     
     try {
-        Write-Host "Loading ExchangeOnlineManagement module..." -ForegroundColor Gray
+        Write-Host "Importing ExchangeOnlineManagement module..." -ForegroundColor Gray
         Import-Module ExchangeOnlineManagement -ErrorAction Stop
 
-        Write-Host "Launching Microsoft sign-in prompt..." -ForegroundColor Gray
+        Write-Host "Opening Microsoft sign-in prompt..." -ForegroundColor Gray
         Connect-ExchangeOnline -ShowBanner:$false -ErrorAction Stop
         
-        # Capture the true tenant string for your menus
-        Write-Host "Retrieving organizational context..." -ForegroundColor Gray
-        $Global:TenantName = (Get-OrganizationConfig).DisplayName
+        Write-Host "Detecting organization context..." -ForegroundColor Gray
+        $OrgConfig = Get-OrganizationConfig -ErrorAction SilentlyContinue
         
-        Write-Host "Successfully authenticated to: $Global:TenantName" -ForegroundColor Green
+        if ($OrgConfig -and $OrgConfig.DisplayName) {
+            $Global:TenantName = $OrgConfig.DisplayName
+        }
+        else {
+            $Conn = Get-ConnectionInformation -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($Conn -and $Conn.UserPrincipalName) {
+                $Global:TenantName = ($Conn.UserPrincipalName -split '@')[-1]
+            }
+            elseif ($Conn -and $Conn.TenantId) {
+                $Global:TenantName = $Conn.TenantId
+            }
+            else {
+                $Global:TenantName = "Connected Tenant"
+            }
+        }
+        
+        Write-Host "`nSuccessfully authenticated to: $Global:TenantName" -ForegroundColor Green
         Start-Sleep -Seconds 1
+        return $true
     }
     catch {
-        Write-Host "`n[AUTHENTICATION ERROR] Failed to connect to Exchange Online." -ForegroundColor Red
-        Write-Host "Details: $_" -ForegroundColor Red
-        Write-Host "--------------------------------------------------" -ForegroundColor DarkRed
+        Write-Host "`n[AUTHENTICATION FAILED] Could not connect to Exchange Online." -ForegroundColor Red
+        Write-Host "Details: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "---------------------------------------------------------------------" -ForegroundColor DarkRed
         $Global:TenantName = "Disconnected"
+        Wait-Console "Press Enter to continue..."
+        return $false
     }
 }
